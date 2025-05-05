@@ -1,10 +1,12 @@
-const { default: mongoose } = require("mongoose");
-const connectDb = require("../utils/connectDb");
+const { sequelize } = require("../utils/connectDb");
+const { connectDb } = require("../utils/connectDb");
 
 const healthcheck = async (req, res) => {
     try {
         // Check DB connection
-        if (mongoose.connection.readyState !== 1) {
+        try {
+            await sequelize.authenticate();
+        } catch (error) {
             await connectDb(); // Reconnect if not connected
         }
 
@@ -22,6 +24,6 @@ const healthcheck = async (req, res) => {
             timestamp: new Date()
         });
     }
-}
+};
 
 module.exports = healthcheck;

@@ -1,24 +1,37 @@
-const mongoose = require("mongoose");
-const { dbConfig } = require("../config/config.js")
+const { Sequelize } = require('sequelize');
+const { dbConfig } = require('../config/config.js');
 
-const connectDb = () => {
-    return new Promise(async (resolve, reject) => {
-        try {
-            const connectDb = await mongoose.connect(dbConfig.uri, {
-                // useNewUrlParser: true,
-                // useUnifiedTopology: true,
-                // useCreateIndex: true,
-                // useFindAndModify: false
-            });
-
-            console.info(`Database Connected`);
-            resolve()
-        } catch (error) {
-            console.error(`Error connecting to MongoDB: ${error.message}`);
-            process.exit(1); // Exit process with failure
-            reject(error);
+const sequelize = new Sequelize(
+    dbConfig.database,
+    dbConfig.username,
+    dbConfig.password,
+    {
+        host: dbConfig.host,
+        port: dbConfig.port,
+        dialect: dbConfig.dialect,
+        logging: dbConfig.logging,
+        define: dbConfig.define,
+        pool: {
+            max: 5,
+            min: 0,
+            acquire: 30000,
+            idle: 10000
         }
-    })
-}
+    }
+);
 
-module.exports = connectDb;
+const connectDb = async () => {
+    try {
+        await sequelize.authenticate();
+        console.info(`Database Connected`);
+        return sequelize;
+    } catch (error) {
+        console.error(`Error connecting to PostgreSQL: ${error.message}`);
+        process.exit(1);
+    }
+};
+
+module.exports = {
+    connectDb,
+    sequelize
+};

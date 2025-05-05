@@ -1,113 +1,113 @@
-const mongoose = require("mongoose");
-const { TEMPLATE_STATUS, TEMPLATE_TYPE, FOLDER_LOCATION } = require("../../helpers/constants");
+const { DataTypes, Model } = require('sequelize');
+const { sequelize } = require('../../utils/connectDb');
+const { TEMPLATE_STATUS, TEMPLATE_TYPE, FOLDER_LOCATION } = require('../../helpers/constants');
 
-const Schema = mongoose.Schema;
+class TemplateLibrary extends Model {}
 
-
-const TemplateLibrarySchema = new Schema({
-
+TemplateLibrary.init({
+    id: {
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true
+    },
     name: {
-        type: String,
-        required: true,
-        trim: true
+        type: DataTypes.STRING,
+        allowNull: false
     },
     language: {
-        type: [String],
-        trim: true
+        type: DataTypes.ARRAY(DataTypes.STRING),
+        defaultValue: []
     },
     channelId: {
-        type: Schema.Types.ObjectId,
-        ref: 'Channel'
+        type: DataTypes.UUID,
+        allowNull: true
     },
     category: {
-        type: String,
-        trim: true
+        type: DataTypes.STRING,
+        allowNull: true
     },
     templateType: {
-        type: String,
-        trim: true
+        type: DataTypes.STRING,
+        allowNull: true
     },
     parentId: {
-        type: Schema.Types.ObjectId,
-        ref: 'TemplateLibrary'
+        type: DataTypes.UUID,
+        allowNull: true
     },
     folderId: {
-        type: Schema.Types.ObjectId,
-        ref: 'TemplateLibrary'
+        type: DataTypes.UUID,
+        allowNull: true
     },
     status: {
-        type: String,
-        enum: [
-            TEMPLATE_STATUS.DRAFT,
-            TEMPLATE_STATUS.PENDING,
-            TEMPLATE_STATUS.APPROVED,
-            TEMPLATE_STATUS.REJECTED,
-            TEMPLATE_STATUS.PUBLISHED,
-            TEMPLATE_STATUS.ARCHIVED,
-            TEMPLATE_STATUS.DELETED,
-        ]
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+            isIn: [Object.values(TEMPLATE_STATUS)]
+        }
     },
     type: {
-        type: String,
-        enum: [
-            TEMPLATE_TYPE.FOLDER,
-            TEMPLATE_TYPE.TEMPLATE
-        ],
-        required: true
-    },
-    blocks: [
-        {
-            contentBlockId: {
-                type: Schema.Types.ObjectId,
-                ref: 'ContentBlock',
-                required: true // Optional: depends on your validation needs
-            }
+        type: DataTypes.STRING,
+        allowNull: false,
+        validate: {
+            isIn: [Object.values(TEMPLATE_TYPE)]
         }
-    ],
+    },
     layoutId: {
-        type: Schema.Types.ObjectId,
-        ref: 'TemplateLibrary'
+        type: DataTypes.UUID,
+        allowNull: true
     },
     isPublished: {
-        type: Boolean,
-        default: false
+        type: DataTypes.BOOLEAN,
+        defaultValue: false
     },
-    createdBy: {
-        type: Schema.Types.ObjectId,
-        ref: 'User',
+    createdById: {
+        type: DataTypes.UUID,
+        allowNull: true
     },
     currentVersion: {
-        type: Number,
-        default: 1,
-        min: 1
+        type: DataTypes.INTEGER,
+        defaultValue: 1
     },
-    sharedWith: [{
-        type: Schema.Types.ObjectId,
-        ref: 'User'
-    }],
     folderLocation: {
-        type: String,
-        enum: [
-            FOLDER_LOCATION.ENTERPRISE_TEMPLATE,
-            FOLDER_LOCATION.MOBILYTIX_TEMPLATE
-        ],
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+            isIn: [Object.values(FOLDER_LOCATION)]
+        }
     }
 }, {
-    timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true }
+    sequelize,
+    modelName: 'TemplateLibrary',
+    tableName: 'template_libraries',
+    paranoid: true
 });
 
-// Add index for frequently queried fields
-TemplateLibrarySchema.index({ name: 1, type: 1, status: 1 });
+// Define associations
+TemplateLibrary.associate = (models) => {
+    TemplateLibrary.belongsTo(models.Channel, { foreignKey: 'channelId', as: 'channel' });
+    TemplateLibrary.belongsTo(models.TemplateLibrary, { foreignKey: 'parentId', as: 'parent' });
+    TemplateLibrary.belongsTo(models.TemplateLibrary, { foreignKey: 'folderId', as: 'folder' });
+    TemplateLibrary.belongsTo(models.TemplateLibrary, { foreignKey: 'layoutId', as: 'layout' });
+    TemplateLibrary.belongsTo(models.User, { foreignKey: 'createdById', as: 'createdBy' });
+    
+    // Self-referential relationship for parent-child folders
+    TemplateLibrary.hasMany(models.TemplateLibrary, { foreignKey: 'parentId', as: 'children' });
+    
+    // Many-to-many relationship with ContentBlocks
+    TemplateLibrary.belongsToMany(models.ContentBlock, { 
+        through: 'TemplateBlock',
+        foreignKey: 'templateId',
+        otherKey: 'contentBlockId',
+        as: 'contentBlocks'
+    });
+    
+    // Many-to-many relationship with Users for sharing
+    TemplateLibrary.belongsToMany(models.User, { 
+        through: 'SharedContent',
+        foreignKey: 'templateId',
+        otherKey: 'userId',
+        as: 'sharedWith'
+    });
+};
 
-TemplateLibrarySchema.virtual('contentBlocks', {
-    ref: 'ContentBlock',
-    localField: 'blocks.contentBlockId',
-    foreignField: '_id',
-    justOne: false
-});
-
-const TemplateLibraryModel = mongoose.model("TemplateLibrary", TemplateLibrarySchema);
-
-module.exports = TemplateLibraryModel;
+module.exports = TemplateLibrary;

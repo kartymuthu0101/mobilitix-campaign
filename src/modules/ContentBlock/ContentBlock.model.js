@@ -1,53 +1,69 @@
-const mongoose = require('mongoose');
+const { DataTypes, Model } = require('sequelize');
+const { sequelize } = require('../../utils/connectDb');
 const { CONTENT_BLOCK_TYPES } = require('../../helpers/constants');
-const { Schema } = mongoose;
 
-const contentBlockSchema = new Schema({
+class ContentBlock extends Model {}
+
+ContentBlock.init({
+    id: {
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true
+    },
     type: {
-        type: String,
-        required: true,
-        enum: [...Object.values(CONTENT_BLOCK_TYPES)]
+        type: DataTypes.STRING,
+        allowNull: false,
+        validate: {
+            isIn: [Object.values(CONTENT_BLOCK_TYPES)]
+        }
     },
     content: {
-        type: String,
-        required: true,
+        type: DataTypes.TEXT,
+        allowNull: false
     },
     templateId: {
-        type: Schema.Types.ObjectId,
-        ref: 'TemplateLibrary'
+        type: DataTypes.UUID,
+        allowNull: true
     },
-    buttonType: String,
-    url: String,
-    countryCode: String,
-    phoneNumber: String,
-    tags: [String],
+    buttonType: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    url: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    countryCode: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    phoneNumber: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    tags: {
+        type: DataTypes.ARRAY(DataTypes.STRING),
+        defaultValue: []
+    },
     isGlobal: {
-        type: Boolean,
-        default: false
+        type: DataTypes.BOOLEAN,
+        defaultValue: false
     },
-    createdBy: {
-        type: Schema.Types.ObjectId,
-        ref: 'User',
+    createdById: {
+        type: DataTypes.UUID,
+        allowNull: true
     }
 }, {
-    timestamps: true, // Adds createdAt and updatedAt automatically
-    toJSON: { virtuals: true }, // Include virtuals when converted to JSON
-    toObject: { virtuals: true } // Include virtuals when converted to objects
+    sequelize,
+    modelName: 'ContentBlock',
+    tableName: 'content_blocks',
+    paranoid: true
 });
 
-// Indexes for better query performance
-// contentBlockSchema.index({ name: 1, type: 1 }); // Compound index
-// contentBlockSchema.index({ isGlobal: 1 });
-// contentBlockSchema.index({ createdBy: 1 });
-
-// Optional: Add virtuals or methods if needed
-// contentBlockSchema.virtual('creator', {
-//     ref: 'User',
-//     localField: 'createdBy',
-//     foreignField: '_id',
-//     justOne: true
-// });
-
-const ContentBlock = mongoose.model('ContentBlock', contentBlockSchema);
+// Define associations
+ContentBlock.associate = (models) => {
+    ContentBlock.belongsTo(models.TemplateLibrary, { foreignKey: 'templateId', as: 'template' });
+    ContentBlock.belongsTo(models.User, { foreignKey: 'createdById', as: 'createdBy' });
+};
 
 module.exports = ContentBlock;

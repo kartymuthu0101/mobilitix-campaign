@@ -1,37 +1,46 @@
-const mongoose = require('mongoose');
-const { Schema } = mongoose;
+const { DataTypes, Model } = require('sequelize');
+const { sequelize } = require('../../utils/connectDb');
 
-const channelSchema = new Schema({
+class Channel extends Model {}
+
+Channel.init({
+    id: {
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true
+    },
     channel_name: {
-        type: String,
-        required: true,
-        trim: true
+        type: DataTypes.STRING,
+        allowNull: false
     },
     description: {
-        type: String,
-        trim: true
+        type: DataTypes.STRING,
+        allowNull: true
     },
     status: {
-        type: String,
-        enum: ['active', 'inactive', 'deleted'],
-        default: 'active'
+        type: DataTypes.ENUM('active', 'inactive', 'deleted'),
+        defaultValue: 'active'
     },
-    createdBy: {
-        type: Schema.Types.ObjectId,
-        ref: 'User',
-        default: null
+    createdById: {
+        type: DataTypes.UUID,
+        allowNull: true
     },
-    updatedBy: {
-        type: Schema.Types.ObjectId,
-        ref: 'User',
-        default: null
+    updatedById: {
+        type: DataTypes.UUID,
+        allowNull: true
     }
 }, {
-    timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true }
+    sequelize,
+    modelName: 'Channel',
+    tableName: 'channels',
+    paranoid: true
 });
 
-const channelModel = mongoose.model('channels', channelSchema);
+// Define associations
+Channel.associate = (models) => {
+    Channel.belongsTo(models.User, { foreignKey: 'createdById', as: 'createdBy' });
+    Channel.belongsTo(models.User, { foreignKey: 'updatedById', as: 'updatedBy' });
+    Channel.hasMany(models.TemplateLibrary, { foreignKey: 'channelId', as: 'templates' });
+};
 
-module.exports = channelModel;
+module.exports = Channel;

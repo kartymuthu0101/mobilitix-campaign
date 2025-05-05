@@ -1,19 +1,29 @@
+// src/modules/TemplatesLibrary/TemplatesLibrary.service.js
 const BaseService = require("../../common/BaseService.js");
-const TemplateLibraryModel = require("./TemplatesLibrary.model.js");
-const { mongoose } = require("mongoose");
+const { TemplateLibrary, SharedContent, User, Channel, ContentBlock } = require("../../models");
+const { Op, QueryTypes } = require('sequelize');
+const { sequelize } = require('../../utils/connectDb');
 const { TEMPLATE_STATUS } = require('../../helpers/constants/index.js');
 
-class UserService extends BaseService {
+class TemplateLibraryService extends BaseService {
     constructor() {
-        super(TemplateLibraryModel);
+        super(TemplateLibrary);
     }
 
     async findOneWithContentBlocks(condition = {}, options = {}) {
         try {
-            return await this.model.findOne(condition)
-                .populate("contentBlocks", "-__v -isGlobal -createdAt -updatedAt")
-                .lean(options.lean || false)
-                .select(options.select || '');
+            return await this.model.findOne({
+                where: condition,
+                include: [{
+                    model: ContentBlock,
+                    as: 'contentBlocks',
+                    attributes: {
+                        exclude: ['__v', 'isGlobal', 'createdAt', 'updatedAt']
+                    },
+                    through: { attributes: [] }
+                }],
+                ...this._processReturnOptions(options)
+            });
         } catch (error) {
             throw error;
         }
@@ -21,31 +31,26 @@ class UserService extends BaseService {
 
     async findFolderGroupCount(folderId) {
         try {
-            return await this.model.aggregate([
-                { $match: { _id: new mongoose.Types.ObjectId(folderId) } },
-                {
-                    $graphLookup: {
-                        from: 'templatelibraries',
-                        startWith: "$parentId",
-                        connectFromField: "parentId",
-                        connectToField: "_id",
-                        as: "parentChain",
-                        depthField: "depth" // Depth starts from 0
-                    }
-                },
-                {
-                    $addFields: {
-                        parentChain: {
-                            $sortArray: {
-                                input: "$parentChain",
-                                sortBy: { depth: 1 } // sort by depth ascending: 0 ➔ 1 ➔ 2
-                            }
-                        }
-                    }
-                }
-            ]);
+            const result = await sequelize.query(`
+                WITH RECURSIVE folder_chain AS (
+                    SELECT id, "parentId", 0 AS depth
+                    FROM template_libraries
+                    WHERE id = :folderId
+                    
+                    UNION ALL
+                    
+                    SELECT tl.id, tl."parentId", fc.depth + 1
+                    FROM template_libraries tl
+                    JOIN folder_chain fc ON tl.id = fc."parentId"
+                )
+                SELECT * FROM folder_chain
+                ORDER BY depth ASC;
+            `, {
+                replacements: { folderId },
+                type: QueryTypes.SELECT
+            });
 
-
+            return [{ parentChain: result }];
         } catch (error) {
             throw error;
         }
@@ -53,28 +58,29 @@ class UserService extends BaseService {
 
     async checkFolderNameExistance(folderId, userId, name, type) {
         try {
+            // Build query with user permissions
+            const folders = await this.model.findOne({
+                where: {
+                    type: type,
+                    name: name,
+                    status: { [Op.ne]: TEMPLATE_STATUS.DELETED },
+                    [Op.or]: [
+                        { createdById: userId },
+                        {
+                            id: {
+                                [Op.in]: sequelize.literal(`(
+                                    SELECT "templateId" FROM shared_content 
+                                    WHERE "userId" = '${userId}' 
+                                    AND "deletedAt" IS NULL
+                                )`)
+                            }
+                        }
+                    ],
+                    ...(folderId ? { parentId: folderId } : { parentId: null })
+                }
+            });
 
-            let findCondition = {
-                type: type,
-                name: name,
-                status: { $ne: TEMPLATE_STATUS.DELETED },
-                $or: [
-                    { createdBy: new mongoose.Types.ObjectId(userId) },
-                    { sharedWith: { $in: [new mongoose.Types.ObjectId(userId)] } }
-                ]
-            };
-            
-            // Add parentId condition if folderId is present
-            if (folderId) {
-                findCondition.parentId = new mongoose.Types.ObjectId(folderId);
-            } else {
-                findCondition.$or.push(
-                    { parentId: { $exists: false } },
-                    { parentId: null }
-                );
-            }
-
-            return await this.model.findOne(findCondition)
+            return folders;
         } catch (error) {
             throw error;
         }
@@ -95,144 +101,103 @@ class UserService extends BaseService {
                 id
             } = payload;
 
-            const matchStage = { ...filters };
+            // Build where clause
+            let whereClause = { ...filters };
 
             if (channelId) {
-                matchStage.channelId = new mongoose.Types.ObjectId(channelId);
-            }
-
-            if (id) {
-                matchStage.$or = [
-                    { createdBy: new mongoose.Types.ObjectId(id) },
-                    { sharedWith: { $in: [new mongoose.Types.ObjectId(id)] } }
-                ]
+                whereClause.channelId = channelId;
             }
 
             if (parentId) {
-                matchStage.parentId = new mongoose.Types.ObjectId(parentId);
+                whereClause.parentId = parentId;
             }
 
             if (folderLocation) {
-                matchStage.folderLocation = folderLocation;
+                whereClause.folderLocation = folderLocation;
             }
 
             if (search) {
-                matchStage.name = { $regex: search, $options: 'i' };
+                whereClause.name = { [Op.iLike]: `%${search}%` };
             }
 
             if (startDate || endDate) {
-                matchStage.createdAt = {};
-            
+                whereClause.createdAt = {};
+
                 if (startDate) {
                     const start = new Date(startDate);
                     start.setHours(0, 0, 0, 0);
-                    matchStage.createdAt.$gte = start;
+                    whereClause.createdAt[Op.gte] = start;
                 }
-            
+
                 if (endDate) {
                     const end = new Date(endDate);
                     end.setHours(23, 59, 59, 999);
-                    matchStage.createdAt.$lte = end;
+                    whereClause.createdAt[Op.lte] = end;
                 }
             }
-            
-            // Build aggregation pipeline
-            const aggregationPipeline = [
-                { $match: matchStage },
-                {
-                    $sort: {
-                        createdAt: -1, // Default: sort createdBy in descending order
-                    }
-                },
-                // {
-                //     $lookup: {
-                //         from: 'masterdatas',
-                //         localField: 'languageId',
-                //         foreignField: '_id',
-                //         as: 'languageId'
-                //     }
-                // },
-                // { $unwind: { path: '$languageId', preserveNullAndEmptyArrays: true } },
 
+            // Add user access conditions
+            whereClause[Op.or] = [
+                { createdById: id },
                 {
-                    $lookup: {
-                        from: 'channels',
-                        localField: 'channelId',
-                        foreignField: '_id',
-                        as: 'channelId'
+                    id: {
+                        [Op.in]: sequelize.literal(`(
+                            SELECT "templateId" FROM shared_content 
+                            WHERE "userId" = '${id}' 
+                            AND "deletedAt" IS NULL
+                        )`)
                     }
-                },
-                { $unwind: { path: '$channelId', preserveNullAndEmptyArrays: true } },
-
-                {
-                    $lookup: {
-                        from: 'templatelibraries',
-                        localField: 'parentId',
-                        foreignField: '_id',
-                        as: 'parentId'
-                    }
-                },
-                { $unwind: { path: '$parentId', preserveNullAndEmptyArrays: true } },
-
-                {
-                    $lookup: {
-                        from: 'templatelibraries',
-                        localField: 'folderId',
-                        foreignField: '_id',
-                        as: 'folderId'
-                    }
-                },
-                { $unwind: { path: '$folderId', preserveNullAndEmptyArrays: true } },
-
-                {
-                    $lookup: {
-                        from: 'templatelibraries',
-                        localField: 'layoutId',
-                        foreignField: '_id',
-                        as: 'layoutId'
-                    }
-                },
-                { $unwind: { path: '$layoutId', preserveNullAndEmptyArrays: true } },
-
-                {
-                    $lookup: {
-                        from: 'users',
-                        localField: 'createdBy',
-                        foreignField: '_id',
-                        as: 'createdBy'
-                    }
-                },
-                { $unwind: { path: '$createdBy', preserveNullAndEmptyArrays: true } },
-
-                {
-                    $lookup: {
-                        from: 'users',
-                        localField: 'sharedWith',
-                        foreignField: '_id',
-                        as: 'sharedWith'
-                    }
-                },
-                {
-                    $lookup: {
-                        from: 'contentblocks',
-                        localField: 'blocks.contentBlockId',
-                        foreignField: '_id',
-                        as: 'contentBlocks'
-                    }
-                },
-                { $skip: +skip },
-                { $limit: +limit },
+                }
             ];
 
-            // Run aggregation
-            const dataPromise = this.model.aggregate(aggregationPipeline).exec();
+            // Query with includes
+            const { count, rows } = await this.model.findAndCountAll({
+                where: whereClause,
+                include: [
+                    {
+                        model: Channel,
+                        as: 'channel',
+                        attributes: ['id', 'channel_name', 'description', 'status']
+                    },
+                    {
+                        model: TemplateLibrary,
+                        as: 'parent',
+                        attributes: ['id', 'name']
+                    },
+                    {
+                        model: TemplateLibrary,
+                        as: 'folder',
+                        attributes: ['id', 'name']
+                    },
+                    {
+                        model: TemplateLibrary,
+                        as: 'layout',
+                        attributes: ['id', 'name']
+                    },
+                    {
+                        model: User,
+                        as: 'createdBy',
+                        attributes: ['id', 'email', 'firstName', 'lastName']
+                    },
+                    {
+                        model: User,
+                        as: 'sharedWith',
+                        attributes: ['id', 'email', 'firstName', 'lastName'],
+                        through: { attributes: [] }
+                    },
+                    {
+                        model: ContentBlock,
+                        as: 'contentBlocks',
+                        attributes: ['id', 'type', 'content'],
+                        through: { attributes: [] }
+                    }
+                ],
+                order: [['createdAt', 'DESC']],
+                offset: parseInt(skip),
+                limit: parseInt(limit)
+            });
 
-            // Separate count query
-            const countPromise = this.model.countDocuments(matchStage).exec();
-
-            const [data, total] = await Promise.all([dataPromise, countPromise]);
-
-            return { data, total };
+            return { data: rows, total: count };
         } catch (error) {
             throw error;
         }
@@ -240,45 +205,81 @@ class UserService extends BaseService {
 
     async getSharedFolderUsers(id) {
         try {
-
-            let aggregateQuery = [
-                {
-                    $match: {
-                        _id: new mongoose.Types.ObjectId(id)
+            const result = await this.model.findByPk(id, {
+                include: [{
+                    model: User,
+                    as: 'sharedWith',
+                    attributes: ['id', 'email'],
+                    through: {
+                        model: SharedContent,
+                        attributes: ['accessType', 'sharedAt']
                     }
-                },
-                {
-                    $lookup: {
-                        from: 'users',
-                        localField: 'sharedWith',
-                        foreignField: '_id',
-                        as: 'sharedWith',
-                        pipeline: [
-                            {
-                                $project: {
-                                    _id: 1,
-                                    email: 1
-                                }
-                            }
-                        ]
-                    }
-                },
-                {
-                    $project: {
-                        _id: 1,
-                        name: 1,
-                        sharedWith: 1
-                    }
-                }
-            ];
+                }],
+                attributes: ['id', 'name']
+            });
 
-            return await this.model.aggregate(aggregateQuery).exec();
-
+            return result ? [result] : [];
         } catch (error) {
             throw error;
         }
     }
-    
+
+    async updateSharedUsers(id, userIdsToAdd = [], userIdsToRemove = [], options = {}) {
+        const transaction = options.transaction || await sequelize.transaction();
+
+        try {
+            const template = await this.model.findByPk(id, { transaction });
+
+            if (!template) {
+                if (!options.transaction) await transaction.rollback();
+                return null;
+            }
+
+            // Add users
+            if (userIdsToAdd.length > 0) {
+                const addPromises = userIdsToAdd.map(userId =>
+                    SharedContent.create({
+                        templateId: id,
+                        userId,
+                        accessType: 'read',
+                        sharedById: options.sharedById || null,
+                        sharedAt: new Date()
+                    }, { transaction })
+                );
+
+                await Promise.all(addPromises);
+            }
+
+            // Remove users
+            if (userIdsToRemove.length > 0) {
+                await SharedContent.destroy({
+                    where: {
+                        templateId: id,
+                        userId: { [Op.in]: userIdsToRemove }
+                    },
+                    transaction
+                });
+            }
+
+            // Reload the template with updated associations
+            const updatedTemplate = await this.model.findByPk(id, {
+                include: [{
+                    model: User,
+                    as: 'sharedWith',
+                    attributes: ['id', 'email'],
+                    through: { attributes: ['accessType'] }
+                }],
+                transaction
+            });
+
+            if (!options.transaction) await transaction.commit();
+
+            return updatedTemplate;
+        } catch (error) {
+            if (!options.transaction) await transaction.rollback();
+            throw error;
+        }
+    }
 }
 
-module.exports = UserService;
+module.exports = TemplateLibraryService;
