@@ -1,12 +1,11 @@
-const express = require('express');
-const MasterController = require('./Channel.controller.js');
-const validator = require('./Channel.validatory.js');
-const { errHandle } = require('../../helpers/constants/handleError.js');
-const {checkPermission} = require("../../common/middlewares/verifyToken.js");
+import express from 'express';
+import ChannelController from './Channel.controller.js';
+import validator from './Channel.validatory.js';
+import { errHandle } from '../../helpers/constants/handleError.js';
+import { checkPermission } from '../../common/middlewares/verifyToken.js';
 
 const channelRouter = express.Router();
-
-const channelController = new MasterController();
+const channelController = new ChannelController();
 
 /**
  * @swagger
@@ -153,4 +152,4 @@ channelRouter.post('/channel', [checkPermission("create"), validator.createChann
  */
 channelRouter.get('/channel', [], errHandle(channelController.getAllChannels));
 
-module.exports = channelRouter;
+export default channelRouter;

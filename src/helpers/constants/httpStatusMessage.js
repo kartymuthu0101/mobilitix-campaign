@@ -1,3 +1,6 @@
+/**
+ * HTTP status message constants
+ */
 const statusMsg = {
     200: "Success",
     201: "Created",
@@ -60,4 +63,4 @@ const statusMsg = {
     511: "Network Authentication Required", // RFC6585
 };
 
-module.exports = statusMsg;
+export default statusMsg;

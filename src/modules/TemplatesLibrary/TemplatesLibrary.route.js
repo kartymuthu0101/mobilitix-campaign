@@ -1,12 +1,142 @@
-const express = require('express');
-const TemmplateLibraryController = require('./TemplatesLibrary.controller.js');
-const validator = require('./TemplatesLibrary.validatory.js');
-// const verifyToken = require("../../common/middlewares/verifyToken.js")
-const { errHandle } = require('../../helpers/constants/handleError.js');
+import express from 'express';
+import TemplateLibraryController from './TemplatesLibrary.controller.js';
+import { folderCreateInput, folderListQueryValidation, updateFolderPermissionsInput, templateCreateInput, templateUpdateInput } from './TemplatesLibrary.validatory.js';
+import { errHandle } from '../../helpers/constants/handleError.js';
+import { checkPermission } from '../../common/middlewares/verifyToken.js';
 
 const templateLibraryRouter = express.Router();
+const templateLibraryController = new TemplateLibraryController();
 
-const templateLibraryController = new TemmplateLibraryController();
+/**
+ * @swagger
+ * /api/v1/template_library/search:
+ *   get:
+ *     summary: Search template library by name with pagination and channel filter
+ *     tags:
+ *       - Template Library
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         required: false
+ *         description: Search keyword to filter templates by name
+ *         schema:
+ *           type: string
+ *           example: t
+ *       - in: query
+ *         name: page
+ *         required: false
+ *         description: Page number for pagination
+ *         schema:
+ *           type: integer
+ *           example: 1
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         description: Number of items per page
+ *         schema:
+ *           type: integer
+ *           example: 10
+ *       - in: query
+ *         name: channelId
+ *         required: true
+ *         description: Channel ID to filter templates
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *           example: 832dee84-d13f-4106-8fad-62676ac92419
+ *       - in: header
+ *         name: authorization
+ *         required: true
+ *         description: Bearer token for authentication
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Templates retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       name:
+ *                         type: string
+ *                       childCount:
+ *                         type: integer
+ *                       breadcrumbs:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: string
+ *                             name:
+ *                               type: string
+ *                 total:
+ *                   type: integer
+ *       401:
+ *         description: Unauthorized or token expired
+ *       500:
+ *         description: Internal server error
+ */
+templateLibraryRouter.get('/search', templateLibraryController.searchTemplates);
+
+/**
+ * @swagger
+ * /api/v1/template_library/path/{id}:
+ *   get:
+ *     summary: Get full path of a template or folder by ID
+ *     tags:
+ *       - Template Library
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         description: The ID of the template or folder
+ *         schema:
+ *           type: string
+ *           example: 32f65cec-7dea-40f2-b2da-26c6cdd69581
+ *     responses:
+ *       200:
+ *         description: Successfully retrieved path hierarchy
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: number
+ *                   example: 200
+ *                 message:
+ *                   type: string
+ *                   example: Success
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         example: 32f65cec-7dea-40f2-b2da-26c6cdd69581
+ *                       name:
+ *                         type: string
+ *                         example: Three
+ *                       parentId:
+ *                         type: string
+ *                         nullable: true
+ *                         example: 374546cf-9383-41f0-b762-fe425986d3aa
+ *       404:
+ *         description: Template or folder not found
+ *       500:
+ *         description: Internal server error
+ */
+templateLibraryRouter.get('/path/:id', [], templateLibraryController.getTemplatePath);
 
 /**
  * @swagger
@@ -28,9 +158,9 @@ const templateLibraryController = new TemmplateLibraryController();
  *               value:
  *                 name: "Marketing Templates"
  *                 parentId: "60af8841d3e2f8a9c4567e13"
+ *                 folderLocation: "ROOT"
  *                 type: "FOLDER"
  *                 channelId: "680b8a7cdd6e5ca7bc709edd"
- *                 folderLocation: "enterprise_templates"
  *             EncryptedPayload:
  *               summary: Encrypted input
  *               value:
@@ -51,7 +181,6 @@ const templateLibraryController = new TemmplateLibraryController();
  *                 parentId: "60af8841d3e2f8a9c4567e13"
  *                 type: "FOLDER"
  *                 channelId: "680b8a7cdd6e5ca7bc709edd"
- *                 folderLocation: "enterprise_templates"
  *       400:
  *         description: Bad Request - Validation error
  *         content:
@@ -93,7 +222,6 @@ const templateLibraryController = new TemmplateLibraryController();
  *           example: "Marketing Templates"
  *         parentId:
  *           type: string
- *           pattern: "^[a-fA-F0-9]{24}$"
  *           example: "60af8841d3e2f8a9c4567e13"
  *         type:
  *           type: string
@@ -103,10 +231,6 @@ const templateLibraryController = new TemmplateLibraryController();
  *           type: string
  *           description: ID of the channel
  *           example: "680b8a7cdd6e5ca7bc709edd"
- *         folderLocation:
- *           type: string
- *           enum: [enterprise_templates, mobilytix_templates]
- *           example: "enterprise_templates"
  * 
  *     EncryptedFolderInput:
  *       type: object
@@ -144,9 +268,6 @@ const templateLibraryController = new TemmplateLibraryController();
  *             channelId:
  *               type: string
  *               example: "680b8a7cdd6e5ca7bc709edd"
- *             folderLocation:
- *               type: string
- *               example: "enterprise_templates"
  * 
  *     ErrorResponse:
  *       type: object
@@ -185,37 +306,26 @@ const templateLibraryController = new TemmplateLibraryController();
  *                     type: string
  *                     example: "name"
  */
-templateLibraryRouter.post('/whatsapp/folder', [validator.folderCreateInput], templateLibraryController.createFolder);
+templateLibraryRouter.post('/whatsapp/folder', [folderCreateInput], templateLibraryController.createFolder);
 
 /**
  * @swagger
  * /api/v1/template_library/whatsapp/folder:
  *   get:
- *     summary: List folders with optional filters and pagination
+ *     summary: List folders with optional filters, sorting, and pagination
  *     tags: [Folders]
  *     parameters:
  *       - in: query
  *         name: channelId
  *         schema:
  *           type: string
- *           format: hex
- *           pattern: "^[a-fA-F0-9]{24}$"
  *         description: ID of the channel
  *       - in: query
  *         name: parentId
  *         schema:
  *           type: string
- *           format: hex
- *           pattern: "^[a-fA-F0-9]{24}$"
  *         required: false
  *         description: ID of the parent folder (optional)
- *       - in: query
- *         name: folderLocation
- *         schema:
- *           type: string
- *           enum: [enterprise_templates, mobilytix_templates]
- *         required: false
- *         description: Folder location type (optional)
  *       - in: query
  *         name: search
  *         schema:
@@ -252,6 +362,44 @@ templateLibraryRouter.post('/whatsapp/folder', [validator.folderCreateInput], te
  *           default: 10
  *         required: false
  *         description: Number of items per page (default is 10)
+ *       - in: query
+ *         name: isGlobalSearch
+ *         schema:
+ *           type: boolean
+ *           default: false
+ *         required: false
+ *         description: Whether to perform a global search (default is false)
+ *       - in: query
+ *         name: onlyShared
+ *         schema:
+ *           type: boolean
+ *           default: false
+ *         required: false
+ *         description: Whether to include only shared items (default is false)
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *           enum: [name, updatedAt, createdAt, childCount, folderChildCount, templateChildCount]
+ *           default: updatedAt
+ *         required: false
+ *         description: Field to sort results by (default is updatedAt)
+ *       - in: query
+ *         name: sortOrder
+ *         schema:
+ *           type: integer
+ *           enum: [1, -1]
+ *           default: -1
+ *         required: false
+ *         description: Sort direction - 1 for ascending, -1 for descending (default is -1)
+ *       - in: query
+ *         name: sortType
+ *         schema:
+ *           type: string
+ *           enum: [FOLDER_FIRST, TEMPLATE_FIRST, null]
+ *           default: null
+ *         required: false
+ *         description: Type-based sorting preference - FOLDER_FIRST to display folders before templates, TEMPLATE_FIRST to display templates before folders
  *     responses:
  *       200:
  *         description: List of folders
@@ -292,9 +440,22 @@ templateLibraryRouter.post('/whatsapp/folder', [validator.folderCreateInput], te
  *                           channelId:
  *                             type: string
  *                             example: "680b8a7cdd6e5ca7bc709edd"
- *                           folderLocation:
- *                             type: string
- *                             example: "enterprise_templates"
+ *                           childCount:
+ *                             type: integer
+ *                             example: 5
+ *                             description: Total number of child items
+ *                           folderChildCount:
+ *                             type: integer
+ *                             example: 2
+ *                             description: Number of folder children
+ *                           templateChildCount:
+ *                             type: integer
+ *                             example: 3
+ *                             description: Number of template children
+ *                           isShared:
+ *                             type: boolean
+ *                             example: false
+ *                             description: Whether the item is shared with the current user
  *       400:
  *         description: Bad Request - Validation error
  *         content:
@@ -308,7 +469,7 @@ templateLibraryRouter.post('/whatsapp/folder', [validator.folderCreateInput], te
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-templateLibraryRouter.get('/whatsapp/folder', [validator.folderListQueryValidation], templateLibraryController.getAllFolder);
+templateLibraryRouter.get('/whatsapp/folder', [folderListQueryValidation], templateLibraryController.getAllFolder);
 
 /**
  * @swagger
@@ -337,10 +498,11 @@ templateLibraryRouter.get('/whatsapp/folder', [validator.folderListQueryValidati
  *               summary: Regular folder permissions update
  *               value:
  *                 userIdsToAdd:
- *                   - 680b432a4128eb84f7e918bb
- *                   - 6810a67a77815a2bd7399de7
+ *                   - userId: "680b432a4128eb84f7e918bb"
+ *                     permission: "write"
  *                 userIdsToRemove:
- *                   - 6810a67a77815a2bd7399de7
+ *                   - "6810a67a77815a2bd7399de7"
+ *                 isNotifyPeople: true
  *             EncryptedInput:
  *               summary: Encrypted folder permissions update
  *               value:
@@ -396,19 +558,33 @@ templateLibraryRouter.get('/whatsapp/folder', [validator.folderListQueryValidati
  *       properties:
  *         userIdsToAdd:
  *           type: array
- *           description: Array of user IDs to be added
+ *           description: Array of user-permission pairs to be added
  *           items:
- *             type: string
+ *             type: object
+ *             required:
+ *               - userId
+ *               - permission
+ *             properties:
+ *               userId:
+ *                 type: string
+ *                 description: ID of the user
+ *               permission:
+ *                 type: string
+ *                 description: Permission level (e.g., view, edit)
  *           example:
- *             - 680b432a4128eb84f7e918bb
- *             - 6810a67a77815a2bd7399de7
+ *             - userId: "680b432a4128eb84f7e918bb"
+ *               permission: "view"
  *         userIdsToRemove:
  *           type: array
  *           description: Array of user IDs to be removed
  *           items:
  *             type: string
  *           example:
- *             - 6810a67a77815a2bd7399de7
+ *             - "6810a67a77815a2bd7399de7"
+ *         isNotifyPeople:
+ *           type: boolean
+ *           description: Whether to notify users about permission changes
+ *           example: true
  *     EncryptedFolderPermissionInput:
  *       type: object
  *       required: [input]
@@ -476,7 +652,7 @@ templateLibraryRouter.get('/whatsapp/folder', [validator.folderListQueryValidati
  *                     type: string
  *                     example: "userIdsToAdd"
  */
-templateLibraryRouter.patch('/whatsapp/folder/permissions/:id', [validator.updateFolderPermissionsInput], templateLibraryController.updateFolderPermissions);
+templateLibraryRouter.patch('/whatsapp/folder/permissions/:id', [updateFolderPermissionsInput], templateLibraryController.updateFolderPermissions);
 
 /**
  * @swagger
@@ -732,8 +908,7 @@ templateLibraryRouter.get('/whatsapp/folder/permissions/:id', [], templateLibrar
  *                     type: string
  *                     example: "name"
  */
-
-templateLibraryRouter.post('/whatsapp/template', [validator.templateCreateInput], errHandle(templateLibraryController.createTemplate));
+templateLibraryRouter.post('/whatsapp/template', [checkPermission("whatsappTemplate:create"), templateCreateInput], errHandle(templateLibraryController.createTemplate));
 
 /**
  * @swagger
@@ -855,7 +1030,7 @@ templateLibraryRouter.post('/whatsapp/template', [validator.templateCreateInput]
  *     ErrorResponse:
  *       $ref: '#/components/schemas/ErrorResponse'
  */
-templateLibraryRouter.patch('/whatsapp/template', [validator.templateUpdateInput], errHandle(templateLibraryController.updateTemplate));
+templateLibraryRouter.patch('/whatsapp/template', [checkPermission("whatsappTemplate:edit"), templateUpdateInput], errHandle(templateLibraryController.updateTemplate));
 
 /**
  * @swagger
@@ -923,9 +1098,90 @@ templateLibraryRouter.patch('/whatsapp/template', [validator.templateUpdateInput
  *       500:
  *         description: Internal server error
  */
-templateLibraryRouter.get('/whatsapp/template/:id', [], errHandle(templateLibraryController.getTemplate));
+templateLibraryRouter.get('/whatsapp/template/:id', [checkPermission("whatsappTemplate:view")], errHandle(templateLibraryController.getTemplate));
 
-
+/**
+ * @swagger
+ * /api/v1/template_library/whatsapp/template/{id}:
+ *   delete:
+ *     summary: Soft delete a template by ID
+ *     tags:
+ *       - Template
+ *     security:
+ *       - bearerAuth: []  # JWT token for authorization
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         description: ID of the template to delete
+ *         schema:
+ *           type: string
+ *           example: "123"
+ *     responses:
+ *       200:
+ *         description: Template deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 statusCode:
+ *                   type: integer
+ *                   example: 200
+ *                 message:
+ *                   type: string
+ *                   example: Template deleted successfully
+ *                 data:
+ *                   type: object
+ *                   example:
+ *                     success: true
+ *                     message: Template deleted successfully
+ *       400:
+ *         description: Template ID is required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             example:
+ *               status: 400
+ *               message: Template ID is required
+ *               data: null
+ *       404:
+ *         description: Template not found or already deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             example:
+ *               status: 404
+ *               message: Template not found or already deleted
+ *               data: null
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             example:
+ *               status: 500
+ *               message: Internal server error
+ *               data: null
+ *
+ * components:
+ *   schemas:
+ *     ErrorResponse:
+ *       type: object
+ *       properties:
+ *         status:
+ *           type: integer
+ *           example: 400
+ *         message:
+ *           type: string
+ *           example: Template not found
+ *         data:
+ *           nullable: true
+ */
+templateLibraryRouter.delete('/whatsapp/template/:id', [checkPermission("whatsappTemplate:delete")], errHandle(templateLibraryController.deleteTemplate));
 
 
 /**
@@ -950,7 +1206,6 @@ templateLibraryRouter.get('/whatsapp/template/:id', [], errHandle(templateLibrar
  *                 parentId: "60af8841d3e2f8a9c4567e13"
  *                 type: "FOLDER"
  *                 channelId: "680b8a7cdd6e5ca7bc709edd"
- *                 folderLocation: "enterprise_templates"
  *             EncryptedPayload:
  *               summary: Encrypted input
  *               value:
@@ -971,7 +1226,6 @@ templateLibraryRouter.get('/whatsapp/template/:id', [], errHandle(templateLibrar
  *                 parentId: "60af8841d3e2f8a9c4567e13"
  *                 type: "FOLDER"
  *                 channelId: "680b8a7cdd6e5ca7bc709edd"
- *                 folderLocation: "enterprise_templates"
  *       400:
  *         description: Bad Request - Validation error
  *         content:
@@ -1023,11 +1277,6 @@ templateLibraryRouter.get('/whatsapp/template/:id', [], errHandle(templateLibrar
  *           type: string
  *           description: ID of the channel
  *           example: "680b8a7cdd6e5ca7bc709edd"
- *         folderLocation:
- *           type: string
- *           enum: [enterprise_templates, mobilytix_templates]
- *           example: "enterprise_templates"
- * 
  *     EncryptedFolderInput:
  *       type: object
  *       required: [input]
@@ -1064,9 +1313,6 @@ templateLibraryRouter.get('/whatsapp/template/:id', [], errHandle(templateLibrar
  *             channelId:
  *               type: string
  *               example: "680b8a7cdd6e5ca7bc709edd"
- *             folderLocation:
- *               type: string
- *               example: "enterprise_templates"
  * 
  *     ErrorResponse:
  *       type: object
@@ -1105,7 +1351,7 @@ templateLibraryRouter.get('/whatsapp/template/:id', [], errHandle(templateLibrar
  *                     type: string
  *                     example: "name"
  */
-templateLibraryRouter.post('/web_push/folder', [validator.folderCreateInput], templateLibraryController.createFolder);
+templateLibraryRouter.post('/web_push/folder', [folderCreateInput], templateLibraryController.createFolder);
 
 /**
  * @swagger
@@ -1129,13 +1375,6 @@ templateLibraryRouter.post('/web_push/folder', [validator.folderCreateInput], te
  *           pattern: "^[a-fA-F0-9]{24}$"
  *         required: false
  *         description: ID of the parent folder (optional)
- *       - in: query
- *         name: folderLocation
- *         schema:
- *           type: string
- *           enum: [enterprise_templates, mobilytix_templates]
- *         required: false
- *         description: Folder location type (optional)
  *       - in: query
  *         name: search
  *         schema:
@@ -1212,9 +1451,6 @@ templateLibraryRouter.post('/web_push/folder', [validator.folderCreateInput], te
  *                           channelId:
  *                             type: string
  *                             example: "680b8a7cdd6e5ca7bc709edd"
- *                           folderLocation:
- *                             type: string
- *                             example: "enterprise_templates"
  *       400:
  *         description: Bad Request - Validation error
  *         content:
@@ -1228,7 +1464,7 @@ templateLibraryRouter.post('/web_push/folder', [validator.folderCreateInput], te
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-templateLibraryRouter.get('/web_push/folder', [validator.folderListQueryValidation], templateLibraryController.getAllFolder);
+templateLibraryRouter.get('/web_push/folder', [folderListQueryValidation], templateLibraryController.getAllFolder);
 
 /**
  * @swagger
@@ -1428,7 +1664,8 @@ templateLibraryRouter.get('/web_push/folder', [validator.folderListQueryValidati
  *                     type: string
  *                     example: "fileName"
  */
-templateLibraryRouter.post('/web_push/template', [validator.templateCreateInput], errHandle(templateLibraryController.createTemplate));
+templateLibraryRouter.post('/web_push/template', [templateCreateInput], errHandle(templateLibraryController.createTemplate));
+
 /**
  * @swagger
  * /api/v1/template_library/web_push/template:
@@ -1617,8 +1854,7 @@ templateLibraryRouter.post('/web_push/template', [validator.templateCreateInput]
  *                   key:
  *                     type: string
  */
-
-templateLibraryRouter.patch('/web_push/template', [validator.templateUpdateInput], errHandle(templateLibraryController.updateTemplate));
+templateLibraryRouter.patch('/web_push/template', [templateUpdateInput], errHandle(templateLibraryController.updateTemplate));
 
 /**
  * @swagger
@@ -1689,6 +1925,7 @@ templateLibraryRouter.patch('/web_push/template', [validator.templateUpdateInput
 templateLibraryRouter.get('/web_push/template/:id', [], errHandle(templateLibraryController.getTemplate));
 
 
+
 /**
  * @swagger
  * /api/v1/template_library/app_push/folder:
@@ -1711,7 +1948,6 @@ templateLibraryRouter.get('/web_push/template/:id', [], errHandle(templateLibrar
  *                 parentId: "60af8841d3e2f8a9c4567e13"
  *                 type: "FOLDER"
  *                 channelId: "680b8a7cdd6e5ca7bc709edd"
- *                 folderLocation: "enterprise_templates"
  *             EncryptedPayload:
  *               summary: Encrypted input
  *               value:
@@ -1732,7 +1968,6 @@ templateLibraryRouter.get('/web_push/template/:id', [], errHandle(templateLibrar
  *                 parentId: "60af8841d3e2f8a9c4567e13"
  *                 type: "FOLDER"
  *                 channelId: "680b8a7cdd6e5ca7bc709edd"
- *                 folderLocation: "enterprise_templates"
  *       400:
  *         description: Bad Request - Validation error
  *         content:
@@ -1784,10 +2019,6 @@ templateLibraryRouter.get('/web_push/template/:id', [], errHandle(templateLibrar
  *           type: string
  *           description: ID of the channel
  *           example: "680b8a7cdd6e5ca7bc709edd"
- *         folderLocation:
- *           type: string
- *           enum: [enterprise_templates, mobilytix_templates]
- *           example: "enterprise_templates"
  * 
  *     EncryptedFolderInput:
  *       type: object
@@ -1825,9 +2056,6 @@ templateLibraryRouter.get('/web_push/template/:id', [], errHandle(templateLibrar
  *             channelId:
  *               type: string
  *               example: "680b8a7cdd6e5ca7bc709edd"
- *             folderLocation:
- *               type: string
- *               example: "enterprise_templates"
  * 
  *     ErrorResponse:
  *       type: object
@@ -1866,7 +2094,7 @@ templateLibraryRouter.get('/web_push/template/:id', [], errHandle(templateLibrar
  *                     type: string
  *                     example: "name"
  */
-templateLibraryRouter.post('/app_push/folder', [validator.folderCreateInput], templateLibraryController.createFolder);
+templateLibraryRouter.post('/app_push/folder', [folderCreateInput], templateLibraryController.createFolder);
 
 /**
  * @swagger
@@ -1890,13 +2118,6 @@ templateLibraryRouter.post('/app_push/folder', [validator.folderCreateInput], te
  *           pattern: "^[a-fA-F0-9]{24}$"
  *         required: false
  *         description: ID of the parent folder (optional)
- *       - in: query
- *         name: folderLocation
- *         schema:
- *           type: string
- *           enum: [enterprise_templates, mobilytix_templates]
- *         required: false
- *         description: Folder location type (optional)
  *       - in: query
  *         name: search
  *         schema:
@@ -1973,9 +2194,6 @@ templateLibraryRouter.post('/app_push/folder', [validator.folderCreateInput], te
  *                           channelId:
  *                             type: string
  *                             example: "680b8a7cdd6e5ca7bc709edd"
- *                           folderLocation:
- *                             type: string
- *                             example: "enterprise_templates"
  *       400:
  *         description: Bad Request - Validation error
  *         content:
@@ -1989,7 +2207,7 @@ templateLibraryRouter.post('/app_push/folder', [validator.folderCreateInput], te
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-templateLibraryRouter.get('/app_push/folder', [validator.folderListQueryValidation], templateLibraryController.getAllFolder);
+templateLibraryRouter.get('/app_push/folder', [folderListQueryValidation], templateLibraryController.getAllFolder);
 
 /**
  * @swagger
@@ -2162,8 +2380,7 @@ templateLibraryRouter.get('/app_push/folder', [validator.folderListQueryValidati
  *                   key:
  *                     type: string
  */
-
-templateLibraryRouter.post('/app_push/template', [validator.templateCreateInput], errHandle(templateLibraryController.createTemplate));
+templateLibraryRouter.post('/app_push/template', [templateCreateInput], errHandle(templateLibraryController.createTemplate));
 
 /**
  * @swagger
@@ -2285,7 +2502,7 @@ templateLibraryRouter.post('/app_push/template', [validator.templateCreateInput]
  *     ErrorResponse:
  *       $ref: '#/components/schemas/ErrorResponse'
  */
-templateLibraryRouter.patch('/app_push/template', [validator.templateUpdateInput], errHandle(templateLibraryController.updateTemplate));
+templateLibraryRouter.patch('/app_push/template', [templateUpdateInput], errHandle(templateLibraryController.updateTemplate));
 
 /**
  * @swagger
@@ -2355,5 +2572,4 @@ templateLibraryRouter.patch('/app_push/template', [validator.templateUpdateInput
  */
 templateLibraryRouter.get('/app_push/template/:id', [], errHandle(templateLibraryController.getTemplate));
 
-
-module.exports = templateLibraryRouter;
+export default templateLibraryRouter;

@@ -1,6 +1,9 @@
-//add.js
-function add(a, b) {
-    return a + b;
-}
+/**
+ * Add two numbers
+ * @param {number} a - First number
+ * @param {number} b - Second number
+ * @returns {number} - Sum of a and b
+ */
+const add = (a, b) => a + b;
 
-module.exports = add;
+export default add;

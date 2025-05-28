@@ -1,4 +1,6 @@
-
+/**
+ * HTTP status code constants
+ */
 const statusCodes = {
     HTTP_CONTINUE: 100,
     HTTP_SWITCHING_PROTOCOLS: 101,
@@ -65,4 +67,4 @@ const statusCodes = {
     HTTP_NETWORK_AUTHENTICATION_REQUIRED: 511, // RFC6585
 };
 
-module.exports = statusCodes
+export default statusCodes;

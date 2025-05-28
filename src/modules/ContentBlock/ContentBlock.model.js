@@ -1,9 +1,30 @@
-const { DataTypes, Model } = require('sequelize');
-const { sequelize } = require('../../utils/connectDb');
-const { CONTENT_BLOCK_TYPES } = require('../../helpers/constants');
+import { DataTypes, Model } from 'sequelize';
+import { sequelize } from '../../utils/connectDb.js';
+import { CONTENT_BLOCK_TYPES } from '../../helpers/constants/index.js';
 
-class ContentBlock extends Model {}
+/**
+ * ContentBlock model for storing template content blocks
+ */
+export default class ContentBlock extends Model {
+    /**
+     * Define model associations
+     * @param {Object} models - All registered models
+     */
+    static associate(models) {
+        ContentBlock.belongsTo(models.TemplateLibrary, { foreignKey: 'templateId', as: 'template' });
+        ContentBlock.belongsTo(models.User, { foreignKey: 'createdById', as: 'createdBy' });
+        
+        // Many-to-many relationship with TemplateLibrary
+        ContentBlock.belongsToMany(models.TemplateLibrary, {
+            through: 'TemplateBlock',
+            foreignKey: 'contentBlockId',
+            otherKey: 'templateId',
+            as: 'templates'
+        });
+    }
+}
 
+// Initialize the model
 ContentBlock.init({
     id: {
         type: DataTypes.UUID,
@@ -19,7 +40,7 @@ ContentBlock.init({
     },
     content: {
         type: DataTypes.TEXT,
-        allowNull: false
+        allowNull: true
     },
     templateId: {
         type: DataTypes.UUID,
@@ -57,13 +78,5 @@ ContentBlock.init({
     sequelize,
     modelName: 'ContentBlock',
     tableName: 'content_blocks',
-    paranoid: true
+    paranoid: false
 });
-
-// Define associations
-ContentBlock.associate = (models) => {
-    ContentBlock.belongsTo(models.TemplateLibrary, { foreignKey: 'templateId', as: 'template' });
-    ContentBlock.belongsTo(models.User, { foreignKey: 'createdById', as: 'createdBy' });
-};
-
-module.exports = ContentBlock;

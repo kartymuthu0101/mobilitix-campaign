@@ -1,9 +1,10 @@
-const express = require('express');
-const MasterController = require('./MasterData.controller.js');
-const validator = require('./MasterData.validator.js');
+import express from 'express';
+import MasterController from './MasterData.controller.js';
+import validator from './MasterData.validator.js';
+import { errHandle } from '../../helpers/constants/handleError.js';
+import { checkPermission } from '../../common/middlewares/verifyToken.js';
 
 const masterDataRouter = express.Router();
-
 const masterController = new MasterController();
 
 masterDataRouter.post('/', [validator.createMasterData], masterController.create);
@@ -78,4 +79,4 @@ masterDataRouter.post('/', [validator.createMasterData], masterController.create
 
 masterDataRouter.get('/', [validator.getAll], masterController.getAll);
 
-module.exports = masterDataRouter;
+export default masterDataRouter;

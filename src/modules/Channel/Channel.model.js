@@ -1,8 +1,22 @@
-const { DataTypes, Model } = require('sequelize');
-const { sequelize } = require('../../utils/connectDb');
+import { DataTypes, Model } from 'sequelize';
+import { sequelize } from '../../utils/connectDb.js';
 
-class Channel extends Model {}
+/**
+ * Channel model for communication channels
+ */
+export default class Channel extends Model {
+    /**
+     * Define model associations
+     * @param {Object} models - All registered models
+     */
+    static associate(models) {
+        Channel.belongsTo(models.User, { foreignKey: 'createdById', as: 'createdBy' });
+        Channel.belongsTo(models.User, { foreignKey: 'updatedById', as: 'updatedBy' });
+        Channel.hasMany(models.TemplateLibrary, { foreignKey: 'channelId', as: 'templates' });
+    }
+}
 
+// Initialize the model
 Channel.init({
     id: {
         type: DataTypes.UUID,
@@ -33,14 +47,5 @@ Channel.init({
     sequelize,
     modelName: 'Channel',
     tableName: 'channels',
-    paranoid: true
+    paranoid: false
 });
-
-// Define associations
-Channel.associate = (models) => {
-    Channel.belongsTo(models.User, { foreignKey: 'createdById', as: 'createdBy' });
-    Channel.belongsTo(models.User, { foreignKey: 'updatedById', as: 'updatedBy' });
-    Channel.hasMany(models.TemplateLibrary, { foreignKey: 'channelId', as: 'templates' });
-};
-
-module.exports = Channel;

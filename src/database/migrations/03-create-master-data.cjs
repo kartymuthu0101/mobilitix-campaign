@@ -1,33 +1,34 @@
-// src/database/migrations/01-create-users.js
+// src/database/migrations/03-create-master-data.js
 'use strict';
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
-    await queryInterface.createTable('users', {
+    await queryInterface.createTable('master_data', {
       id: {
         type: Sequelize.UUID,
         defaultValue: Sequelize.UUIDV4,
         primaryKey: true
       },
-      firstName: {
+      type: {
         type: Sequelize.STRING,
         allowNull: false
       },
-      lastName: {
+      key: {
         type: Sequelize.STRING,
         allowNull: false
       },
-      email: {
+      value: {
         type: Sequelize.STRING,
-        allowNull: false,
-        unique: true
+        allowNull: false
       },
-      roles: {
-        type: Sequelize.STRING,
-        allowNull: true
-      },
-      password: {
-        type: Sequelize.STRING,
+      createdById: {
+        type: Sequelize.UUID,
+        references: {
+          model: 'users',
+          key: 'id'
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'SET NULL',
         allowNull: true
       },
       createdAt: {
@@ -37,14 +38,10 @@ module.exports = {
       updatedAt: {
         type: Sequelize.DATE,
         allowNull: false
-      },
-      deletedAt: {
-        type: Sequelize.DATE,
-        allowNull: true
       }
     });
   },
   down: async (queryInterface, Sequelize) => {
-    await queryInterface.dropTable('users');
+    await queryInterface.dropTable('master_data');
   }
 };

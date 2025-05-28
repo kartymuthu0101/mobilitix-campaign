@@ -1,8 +1,21 @@
-const { DataTypes, Model } = require('sequelize');
-const { sequelize } = require('../../utils/connectDb');
+import { DataTypes, Model } from 'sequelize';
+import { sequelize } from '../../utils/connectDb.js';
 
-class TemplateBlock extends Model {}
+/**
+ * TemplateBlock model for managing template and content block associations
+ */
+export default class TemplateBlock extends Model {
+    /**
+     * Define model associations
+     * @param {Object} models - All registered models
+     */
+    static associate(models) {
+        // No additional associations needed as this is a join table
+        // that already has associations defined in the related models
+    }
+}
 
+// Initialize the model
 TemplateBlock.init({
     id: {
         type: DataTypes.UUID,
@@ -33,7 +46,11 @@ TemplateBlock.init({
     sequelize,
     modelName: 'TemplateBlock',
     tableName: 'template_blocks',
-    timestamps: true
+    timestamps: true,
+    indexes: [
+        {
+            unique: true,
+            fields: ['templateId', 'contentBlockId']
+        }
+    ]
 });
-
-module.exports = TemplateBlock;

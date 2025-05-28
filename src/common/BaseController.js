@@ -1,11 +1,11 @@
-const { sendResponse } = require("../helpers/response.js");
+import { sendResponse } from "../helpers/response.js";
 
 class BaseController {
-
-    success;
-    constructor() {
-        this.sendResponse = sendResponse;
-    }
+  success;
+  
+  constructor() {
+    this.sendResponse = sendResponse;
+  }
 }
 
-module.exports = BaseController;
+export default BaseController;

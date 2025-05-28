@@ -1,12 +1,11 @@
-const express = require("express");
-const campaignsV1Router = require("./v1.js");
-const decryptBody = require("../common/middlewares/decryptBody.js");
-const healthcheck = require("../common/healthCheck.js");
-
+import express from "express";
+import campaignsV1Router from "./v1.js";
+import decryptBody from "../common/middlewares/decryptBody.js";
+import healthcheck from "../common/healthCheck.js";
+import { verifyToken } from "../common/middlewares/verifyToken.js";
 const router = express.Router();
 
-router.use('/v1', [decryptBody], campaignsV1Router);
+router.use('/v1', [decryptBody, verifyToken], campaignsV1Router);
 router.get('/healthcheck', healthcheck);
 
-
-module.exports = router;
+export default router;

@@ -1,7 +1,10 @@
-const { Sequelize } = require('sequelize');
-const { dbConfig } = require('../config/config.js');
+import { Sequelize } from 'sequelize';
+import { dbConfig } from '../config/config.js';
 
-const sequelize = new Sequelize(
+/**
+ * Create Sequelize instance with configuration
+ */
+export const sequelize = new Sequelize(
     dbConfig.database,
     dbConfig.username,
     dbConfig.password,
@@ -20,18 +23,23 @@ const sequelize = new Sequelize(
     }
 );
 
-const connectDb = async () => {
+/**
+ * Connect to the database
+ * @returns {Promise<Sequelize>} - Sequelize instance
+ */
+export const connectDb = async () => {
     try {
         await sequelize.authenticate();
         console.info(`Database Connected`);
         return sequelize;
     } catch (error) {
         console.error(`Error connecting to PostgreSQL: ${error.message}`);
+        throw error
         process.exit(1);
     }
 };
 
-module.exports = {
-    connectDb,
-    sequelize
+export default {
+    sequelize,
+    connectDb
 };
